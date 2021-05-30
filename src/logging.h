@@ -1,11 +1,15 @@
 #ifndef LOGGING_H
 #define LOGGING_H
+#include <string_view>
 
 #include <SFML/System.hpp>
 #include <SFML/Graphics/Rect.hpp>
 #include "stringImproved.h"
-
+#if defined(_MSC_VER)
+#define LOG(LEVEL) Logging(LOGLEVEL_ ## LEVEL, __FILE__, __LINE__, __FUNCTION__)
+#else
 #define LOG(LEVEL) Logging(LOGLEVEL_ ## LEVEL, __FILE__, __LINE__, __PRETTY_FUNCTION__)
+#endif
 
 enum ELogLevel
 {
@@ -21,11 +25,11 @@ class Logging : sf::NonCopyable
     static FILE* log_stream;
     bool do_logging;
 public:
-    Logging(ELogLevel level, string file, int line, string function_name);
+    Logging(ELogLevel level, std::string_view file, int line, std::string_view function_name);
     ~Logging();
     
     static void setLogLevel(ELogLevel level);
-    static void setLogFile(string filename);
+    static void setLogFile(std::string_view filename);
     
     friend const Logging& operator<<(const Logging& log, const char* str);
 };

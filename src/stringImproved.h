@@ -1,13 +1,14 @@
 #ifndef STRING_IMPROVED_H
 #define STRING_IMPROVED_H
 
-#include <stdlib.h>
+#include <cstdlib>
 #include <string>
 #include <limits>
 #include <vector>
 #include <map>
 #include <sstream>
 #include <iomanip>
+#include <algorithm>
 
 /*
     The improved string class. while this class is not always the most efficient in terms of execution speed.
@@ -24,10 +25,7 @@ public:
     string(const char* str) : std::string(str) {}
     string(const char* str, int length) : std::string(str, length) {}
 
-    string(const char c) : std::string()
-    {
-        push_back(c);
-    }
+    string(const char c) : std::string(1, c) {}
 
     string(const int nr) : std::string()
     {
@@ -66,7 +64,7 @@ public:
     {
         int start = pos;
         int end = endpos;
-        int len = length();
+        int len = static_cast<int>(length());
         if (start < 0)
             start = len + start;
         if (end < 0)
@@ -109,7 +107,7 @@ public:
     {
         if (width < int(length()))
             return *this;
-        int right = width - length();
+        int right = width - int(length());
         int left = right / 2;
         right -= left;
         return string(fillchar) * left + *this + string(fillchar) * right;
@@ -120,14 +118,14 @@ public:
         string S[start:end].  Optional arguments start and end are interpreted
         as in slice notation.
     */
-    int count(const string sub) const
+    int count(const string &sub) const
     {
         if (length() < sub.length())
             return 0;
         int count = 0;
         for(unsigned int n=0; n<=length() - sub.length(); n++)
         {
-            if (substr(n, n + sub.length()) == sub)
+            if (substr(n, n + int(sub.length())) == sub)
                 count++;
         }
         return count;
@@ -138,11 +136,11 @@ public:
         With optional start, test S beginning at that position.
         With optional end, stop comparing S at that position.
     */
-    bool endswith(const string suffix) const
+    bool endswith(const string &suffix) const
     {
         if (suffix.length() == 0)
             return true;
-        return substr(-suffix.length()) == suffix;
+        return substr(-int(suffix.length())) == suffix;
     }
 
     /*
@@ -179,13 +177,13 @@ public:
         such that sub is contained within s[start:end].  Optional
         arguments start and end are interpreted as in slice notation.
     */
-    int find(const string sub, int start=0) const
+    int find(const string &sub, int start=0) const
     {
         if (sub.length() + start > length() || sub.length() < 1)
             return -1;
         for(unsigned int n=start; n<=length() - sub.length(); n++)
         {
-            if(substr(n, n+sub.length()) == sub)
+            if(substr(n, n+int(sub.length())) == sub)
                 return n;
         }
         return -1;
@@ -200,8 +198,8 @@ public:
 
         //Reserve the target String to the current length plus the length of all the parameters.
         //Which should be a good rough estimate for the final UnicodeString length.
-        int itemslength = 0;
-        for(auto it : mapping)
+        size_t itemslength = 0;
+        for(const auto& it : mapping)
         {
             itemslength += it.second.length();
         }
@@ -341,7 +339,7 @@ public:
             }
             if (::isalpha((*this)[n]))
             {
-                if (::isupper((*this)[n]) != needUpper)
+                if (bool(::isupper((*this)[n])) != needUpper)
                     return false;
                 needUpper = false;
             }else{
@@ -375,7 +373,7 @@ public:
         Return a string which is the concatenation of the strings in the
         iterable.  The separator between elements is S.
     */
-    string join(const std::vector<string> list) const
+    string join(const std::vector<string> &list) const
     {
         string ret;
         for(unsigned int n=0; n<list.size(); n++)
@@ -395,7 +393,7 @@ public:
     {
         if (int(length()) >= width)
             return *this;
-        return *this + string(fillchar) * (width - length());
+        return *this + string(fillchar) * (width - int(length()));
     }
 
     /*
@@ -413,7 +411,7 @@ public:
         Return a copy of the string S with leading whitespace removed.
         If chars is given and not None, remove characters in chars instead.
     */
-    string lstrip(const string chars=_WHITESPACE) const
+    string lstrip(const string &chars=_WHITESPACE) const
     {
         int start=0;
         while(chars.find(substr(start, start+1)) > -1)
@@ -426,14 +424,14 @@ public:
         the separator itand the part after it.  If the separator is not
         found, return S and two empty strings.
     */
-    std::vector<string> partition(const string sep) const;
+    std::vector<string> partition(const string &sep) const;
 
     /*
         Return a copy of string S with all occurrences of substring
         old replaced by new.  If the optional argument count is
         given, only the first count occurrences are replaced.
     */
-    string replace(const string old, const string _new, const int count=-1) const
+    string replace(const string &old, const string &_new, const int count=-1) const
     {
         if (old.length() < 1)
             return *this;
@@ -448,7 +446,7 @@ public:
             if (start < 0)
                 break;
             result += substr(end, start) + _new;
-            end = start + old.length();
+            end = start + int(old.length());
         }
         result += substr(end);
         return result;
@@ -459,13 +457,13 @@ public:
         such that sub is contained within s[start:end].  Optional
         arguments start and end are interpreted as in slice notation.
     */
-    int rfind(const string sub, int start=0) const
+    int rfind(const string &sub, int start=0) const
     {
         if (sub.length() + start > length())
             return -1;
-        for(unsigned int n=length() - sub.length(); int(n)>=start; n--)
+        for(int n=int(length()) - int(sub.length()); n>=start; n--)
         {
-            if(substr(n, n+sub.length()) == sub)
+            if(substr(n, n+int(sub.length())) == sub)
                 return n;
         }
         return -1;
@@ -479,7 +477,7 @@ public:
     {
         if (int(length()) >= width)
             return *this;
-        return string(fillchar) * (width - length()) + *this;
+        return string(fillchar) * (width - int(length())) + *this;
     }
 
     /*
@@ -487,7 +485,7 @@ public:
         the part before it, the separator itand the part after it.  If the
         separator is not found, return two empty strings and S.
     */
-    std::vector<string> rpartition(const string sep) const;
+    std::vector<string> rpartition(const string &sep) const;
 
     /*
         Return a list of the words in the string S, using sep as the
@@ -496,15 +494,15 @@ public:
         done. If sep is not specified or is None, any whitespace string
         is a separator.
     */
-    std::vector<string> rsplit(const string sep=_WHITESPACE, const int maxsplit=-1) const;
+    std::vector<string> rsplit(const string &sep=_WHITESPACE, const int maxsplit=-1) const;
 
     /*
         Return a copy of the string S with trailing whitespace removed.
         If chars is given and not None, remove characters in chars instead.
     */
-    string rstrip(const string chars=_WHITESPACE) const
+    string rstrip(const string &chars=_WHITESPACE) const
     {
-        int end=length()-1;
+        int end=int(length())-1;
         while(chars.find(substr(end, end+1)) > -1)
             end--;
         return substr(0, end+1);
@@ -517,7 +515,7 @@ public:
         whitespace string is a separator and empty strings are removed
         from the result.
     */
-    std::vector<string> split(const string sep="", int maxsplit=-1) const
+    std::vector<string> split(const string &sep="", int maxsplit=-1) const
     {
         std::vector<string> res;
         int start = 0;
@@ -543,7 +541,7 @@ public:
                 return res;
             }
             res.push_back(substr(start, offset));
-            start = offset + sep.length();
+            start = offset + int(sep.length());
             if (maxsplit > 0)
                 maxsplit--;
         }
@@ -564,9 +562,9 @@ public:
         With optional start, test S beginning at that position.
         With optional end, stop comparing S at that position.
     */
-    bool startswith(const string prefix) const
+    bool startswith(const string &prefix) const
     {
-        return substr(0, prefix.length()) == prefix;
+        return substr(0, int(prefix.length())) == prefix;
     }
 
     /*
@@ -574,7 +572,7 @@ public:
         whitespace removed.
         If chars is given and not None, remove characters in chars instead.
     */
-    string strip(const string chars=_WHITESPACE) const
+    string strip(const string &chars=_WHITESPACE) const
     {
         return lstrip(chars).rstrip(chars);
     }
@@ -624,7 +622,7 @@ public:
         remaining characters have been mapped through the given
         translation table, which must be a string of length 256.
     */
-    string translate(const string table, const string deletechars="") const;
+    string translate(const string &table, const string &deletechars="") const;
     /*
         Return a copy of the string S converted to uppercase.
     */
@@ -645,14 +643,14 @@ public:
         if (int(length()) > width)
             return *this;
         if ((*this)[0] == '-' || (*this)[0] == '+')
-            return substr(0, 1) + string("0") * (width - length()) + substr(1);
-        return string("0") * (width - length()) + *this;
+            return substr(0, 1) + string("0") * (width - int(length())) + substr(1);
+        return string("0") * (width - int(length())) + *this;
     }
 
 
     /* Convert this string to a number */
-    float toFloat() { return atof(c_str()); }
-    int toInt(int bits_per_digit=10) { return strtol(c_str(), nullptr, bits_per_digit); }
+    float toFloat() const { return strtof(c_str(), nullptr); }
+    int toInt(int bits_per_digit=10) const { return strtol(c_str(), nullptr, bits_per_digit); }
 };
 #undef _WHITESPACE
 

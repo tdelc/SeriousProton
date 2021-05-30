@@ -1,5 +1,25 @@
-#include <i18n.h>
-#include <resources.h>
+#include "i18n.h"
+
+#include <cassert>
+
+
+#include "resources.h"
+#include "logging.h"
+
+#if defined(_MSC_VER)
+#include <cstdlib>
+static inline uint32_t bswap32(uint32_t value)
+{
+    return _byteswap_ulong(value);
+}
+#elif defined(__GNUC__)
+static inline uint32_t bswap32(uint32_t value)
+{
+    return __builtin_bswap32(value);
+}
+#else
+#error "Unknown compiler - need a byteswap function!"
+#endif
 
 static constexpr uint32_t mo_file_magic = 0x950412de;
 static constexpr uint32_t mo_file_magic_swapped = 0xde120495;
@@ -11,31 +31,43 @@ struct MoHeader
     uint32_t offset_translated;
 };
 
-static i18n::Catalogue main_catalogue;
-
 const string& tr(const string& input)
 {
-    return main_catalogue.tr(input);
+    auto catalogue = i18n::Catalogue::get();
+    if (catalogue)
+        return catalogue->tr(input);
+
+    LOG(ERROR) << "tr called before the catalogue is loaded!";
+    assert(false);
+    return input;
 }
 
 const string& tr(const string& context, const string& input)
 {
-    return main_catalogue.tr(context, input);
+    auto catalogue = i18n::Catalogue::get();
+    if (catalogue)
+        return catalogue->tr(context, input);
+
+    LOG(ERROR) << "tr called before the catalogue is loaded!";
+    assert(false);
+    return input;
 }
 
 namespace i18n {
 
+std::unique_ptr<Catalogue> Catalogue::instance;
+
 bool load(const string& resource_name)
 {
-    return main_catalogue.load(resource_name);
+    return Catalogue::load(resource_name);
 }
 
 void reset()
 {
-    main_catalogue = Catalogue();
+    Catalogue::reset();
 }
 
-const string& Catalogue::tr(const string& input)
+const string& Catalogue::tr(const string& input) const
 {
     const auto it = entries.find(input);
     if (it != entries.end())
@@ -43,7 +75,7 @@ const string& Catalogue::tr(const string& input)
     return input;
 }
 
-const string& Catalogue::tr(const string& context, const string& input)
+const string& Catalogue::tr(const string& context, const string& input) const
 {
     const auto cit = context_entries.find(context);
     if (cit == context_entries.end())
@@ -54,7 +86,35 @@ const string& Catalogue::tr(const string& context, const string& input)
     return it->second;
 }
 
+Catalogue::Catalogue() = default;
+Catalogue::~Catalogue() = default;
+
 bool Catalogue::load(const string& resource_name)
+{
+    if (!instance)
+        instance.reset(new Catalogue);
+
+    assert(instance);
+    if (!instance)
+    {
+        // This probably won't work if we're OOM.
+        LOG(ERROR) << "Failed to allocate the Catalogue!";
+    }
+
+    return instance->load_resource(resource_name);
+}
+
+void Catalogue::reset()
+{
+    instance.reset();
+}
+
+const Catalogue* Catalogue::get()
+{
+    return instance.get();
+}
+
+bool Catalogue::load_resource(const string& resource_name)
 {
     auto stream = getResourceStream(resource_name);
     if (!stream)
@@ -70,10 +130,10 @@ bool Catalogue::load(const string& resource_name)
             return false;
         if (swap)
         {
-            header.version = __builtin_bswap32(header.version);
-            header.count = __builtin_bswap32(header.count);
-            header.offset_origonal = __builtin_bswap32(header.offset_origonal);
-            header.offset_translated = __builtin_bswap32(header.offset_translated);
+            header.version = bswap32(header.version);
+            header.count = bswap32(header.count);
+            header.offset_origonal = bswap32(header.offset_origonal);
+            header.offset_translated = bswap32(header.offset_translated);
         }
         std::vector<uint32_t> length_offset_origonal;
         std::vector<uint32_t> length_offset_translated;
@@ -88,9 +148,9 @@ bool Catalogue::load(const string& resource_name)
         if (swap)
         {
             for(auto& n : length_offset_origonal)
-                n = __builtin_bswap32(n);
+                n = bswap32(n);
             for(auto& n : length_offset_translated)
-                n = __builtin_bswap32(n);
+                n = bswap32(n);
         }
         for(size_t n=0; n<header.count; n++)
         {

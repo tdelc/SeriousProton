@@ -1,7 +1,20 @@
-#include <SFML/System.hpp>
-#include <dirent.h>
-#include <stdio.h>
 #include "resources.h"
+
+#include <SFML/System.hpp>
+#ifdef _MSC_VER
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#else
+#include <dirent.h>
+#endif
+#include <cstdio>
+#include <filesystem>
+
+#if defined(ANDROID)
+#include <SFML/System/NativeActivity.hpp>
+#include <android/native_activity.h>
+#include <android/asset_manager.h>
+#endif
 
 PVector<ResourceProvider> resourceProviders;
 
@@ -24,9 +37,9 @@ bool ResourceProvider::searchMatch(const string name, const string searchPattern
         int offset = name.find(parts[n], pos);
         if (offset < 0)
             return false;
-        pos = offset + parts[n].length();
+        pos = offset + static_cast<int>(parts[n].length());
     }
-    return pos == int(name.length());
+    return pos == static_cast<int>(name.length());
 }
 
 string ResourceStream::readLine()
@@ -50,7 +63,20 @@ class FileResourceStream : public ResourceStream
 public:
     FileResourceStream(string filename)
     {
-        open_success = stream.open(filename);
+#ifndef ANDROID
+        std::error_code ec;
+        if(!std::filesystem::is_regular_file(filename.c_str(), ec))
+        {
+            //Error code "no such file or directory" thrown really often, so no trace here
+            //not to spam the log
+            open_success = false;
+        }
+        else
+            open_success = stream.open(filename);
+#else
+       //Android reads from the assets bundle, so we cannot check if the file exists and is a regular file
+       open_success = stream.open(filename);
+#endif
     }
     virtual ~FileResourceStream()
     {
@@ -81,13 +107,13 @@ public:
 
 
 DirectoryResourceProvider::DirectoryResourceProvider(string basepath)
-: basepath(basepath)
 {
+    this->basepath = basepath.rstrip("\\/");
 }
 
 P<ResourceStream> DirectoryResourceProvider::getResourceStream(string filename)
 {
-    P<FileResourceStream> stream = new FileResourceStream(basepath + filename);
+    P<FileResourceStream> stream = new FileResourceStream(basepath + "/" + filename);
     if (stream->isOpen())
         return stream;
     return nullptr;
@@ -96,13 +122,77 @@ P<ResourceStream> DirectoryResourceProvider::getResourceStream(string filename)
 std::vector<string> DirectoryResourceProvider::findResources(string searchPattern)
 {
     std::vector<string> found_files;
+#if defined(ANDROID)
+    //Limitation : 
+    //As far as I know, Android NDK won't provide a way to list subdirectories
+    //So we will only list files in the first level directory 
+    ANativeActivity *nactivity {sf::getNativeActivity()};
+   
+    AAssetManager *asset_manager{nullptr};
+    if(nactivity)
+    {
+        asset_manager = nactivity->assetManager;
+    }
+    if(asset_manager)
+    {
+        int idx = searchPattern.rfind("/");
+        string forced_path = basepath;
+        string prefix = "";
+        if (idx > -1)
+        {
+            prefix = searchPattern.substr(0, idx);
+            forced_path += "/" + prefix;
+            prefix += "/";
+        }
+        AAssetDir* dir = AAssetManager_openDir(asset_manager, (forced_path).c_str());
+        if (dir)
+        {
+            const char* filename;
+            while ((filename = AAssetDir_getNextFileName(dir)) != nullptr)
+            {
+                if (searchMatch(prefix + filename, searchPattern))
+                    found_files.push_back(prefix + filename);
+            }
+            AAssetDir_close(dir);
+        }
+    }
+#else
     findResources(found_files, "", searchPattern);
+#endif
     return found_files;
 }
 
 void DirectoryResourceProvider::findResources(std::vector<string>& found_files, const string path, const string searchPattern)
 {
-    DIR* dir = opendir((basepath + path).c_str());
+#ifdef _MSC_VER
+    WIN32_FIND_DATAA data;
+    string search_root(basepath + "/" + path);
+    if (!search_root.endswith("/"))
+    {
+        search_root += "/";
+    }
+    HANDLE handle = FindFirstFileA((search_root + "*").c_str(), &data);
+    if (handle == INVALID_HANDLE_VALUE)
+        return;
+    do
+    {
+        if (data.cFileName[0] == '.')
+            continue;
+        string name = path + string(data.cFileName);
+        if (data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+        {
+            findResources(found_files, name + "/", searchPattern);
+        }
+        else
+        {
+            if (searchMatch(name, searchPattern))
+                found_files.push_back(name);
+        }
+    } while (FindNextFileA(handle, &data));
+
+    FindClose(handle);
+#else
+    DIR* dir = opendir((basepath + "/" + path).c_str());
     if (!dir)
         return;
     
@@ -117,6 +207,7 @@ void DirectoryResourceProvider::findResources(std::vector<string>& found_files, 
         findResources(found_files, path + string(entry->d_name) + "/", searchPattern);
     }
     closedir(dir);
+#endif
 }
 
 P<ResourceStream> getResourceStream(string filename)

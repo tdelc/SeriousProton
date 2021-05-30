@@ -126,14 +126,19 @@ void InputHandler::handleEvent(sf::Event& event)
     }
     else if (event.type == sf::Event::JoystickMoved)
     {
-        float axis_pos;
+        static constexpr float scale_factor = 100.f / (100.f - joystick_axis_snap_to_0_range);
+
+        float axis_pos = 0.f;
+        
         if (event.joystickMove.position > joystick_axis_snap_to_0_range) {
-            axis_pos = (event.joystickMove.position - joystick_axis_snap_to_0_range) * ((joystick_axis_snap_to_0_range / 100) + 1);
+            axis_pos = (event.joystickMove.position - joystick_axis_snap_to_0_range) * scale_factor;
         } else if (event.joystickMove.position < -joystick_axis_snap_to_0_range) {
-            axis_pos = (event.joystickMove.position + joystick_axis_snap_to_0_range) * ((joystick_axis_snap_to_0_range / 100) + 1);
-        } else {
-            axis_pos = 0.0;
+            axis_pos = (event.joystickMove.position + joystick_axis_snap_to_0_range) * scale_factor;
         }
+
+        // Clamp axis_pos within SFML range.
+        axis_pos = std::min(std::max(-100.f, axis_pos), 100.f);
+
         if (joystick_axis_pos[event.joystickMove.joystickId][event.joystickMove.axis] != axis_pos){
             joystick_axis_changed[event.joystickMove.joystickId][event.joystickMove.axis] = true;
         }
@@ -148,6 +153,13 @@ void InputHandler::handleEvent(sf::Event& event)
     {
         joystick_button_down[event.joystickMove.joystickId][event.joystickButton.button] = false;
         joystick_button_changed[event.joystickMove.joystickId][event.joystickButton.button] = true;
+    }
+    else if (event.type == sf::Event::LostFocus)
+    {
+        for(unsigned int n=0; n<sf::Keyboard::KeyCount; n++)
+        {
+            keyboard_button_down[n] = false;
+        }
     }
 }
 

@@ -17,7 +17,7 @@ static string getObjectClassNameRecursive(P<PObject> object, ScriptClassInfo* in
     return "";
 }
 
-string getScriptClassClassNameFromObject(P<PObject> object)
+string getScriptClassClassNameFromObject(const P<PObject>& object)
 {
     static bool child_relations_set = false;
     if (!child_relations_set)
@@ -56,21 +56,9 @@ template<> int convert<bool>::returnType(lua_State* L, bool b)
     return 1;
 }
 
-template<> int convert<long>::returnType(lua_State* L, long i)
+template<> int convert<string>::returnType(lua_State* L, const string& s)
 {
-    lua_pushinteger(L, i);
-    return 1;
-}
-
-template<> int convert<int>::returnType(lua_State* L, int i)
-{
-    lua_pushinteger(L, i);
-    return 1;
-}
-
-template<> int convert<string>::returnType(lua_State* L, string s)
-{
-    lua_pushstring(L, s.c_str());
+    lua_pushlstring(L, s.c_str(), s.length());
     return 1;
 }
 
@@ -104,16 +92,16 @@ template<> void convert<sf::Color>::param(lua_State* L, int& idx, sf::Color& col
     
     if (str.startswith("#") && str.length() == 7)
     {
-        color.r = str.substr(1, 2).toInt(16);
-        color.g = str.substr(3, 2).toInt(16);
-        color.b = str.substr(5, 2).toInt(16);
+        color.r = static_cast<uint8_t>(str.substr(1, 2).toInt(16));
+        color.g = static_cast<uint8_t>(str.substr(3, 2).toInt(16));
+        color.b = static_cast<uint8_t>(str.substr(5, 2).toInt(16));
     }
     
     std::vector<string> parts = str.split(",");
     if (parts.size() == 3)
     {
-        color.r = parts[0].toInt();
-        color.g = parts[1].toInt();
-        color.b = parts[2].toInt();
+        color.r = static_cast<uint8_t>(parts[0].toInt());
+        color.g = static_cast<uint8_t>(parts[1].toInt());
+        color.b = static_cast<uint8_t>(parts[2].toInt());
     }
 }

@@ -10,23 +10,43 @@ int DEBUG_PobjCount;
 PObject* DEBUG_PobjListStart;
 #endif
 
-#ifdef ENABLE_CRASH_LOGGER
-#ifdef __WIN32__
-//Exception handler for mingw, from https://github.com/jrfonseca/drmingw
-#include <exchndl.h>
-#endif//__WIN32__
-#endif//ENABLE_CRASH_LOGGER
+#ifdef WIN32
+#include <windows.h>
+
+namespace
+{
+    HINSTANCE exchndl = nullptr;
+}
+#endif
 
 Engine* engine;
 
 Engine::Engine()
 {
     engine = this;
-#ifdef ENABLE_CRASH_LOGGER
-#ifdef __WIN32__
-    ExcHndlInit();
-#endif//__WIN32__
-#endif//ENABLE_CRASH_LOGGER
+
+#ifdef WIN32
+    // Setup crash reporter (Dr. MinGW) if available.
+    exchndl = LoadLibrary(TEXT("exchndl.dll"));
+
+    if (exchndl)
+    {
+        auto pfnExcHndlInit = GetProcAddress(exchndl, "ExcHndlInit");
+
+        if (pfnExcHndlInit)
+        {
+            pfnExcHndlInit();
+            LOG(INFO) << "Crash Reporter ON";
+        }
+        else
+        {
+            LOG(WARNING) << "Failed to initialize Crash Reporter";
+            FreeLibrary(exchndl);
+            exchndl = nullptr;
+        }
+    } 
+#endif // WIN32
+
     initRandom();
     windowManager = nullptr;
     CollisionManager::initialize();
@@ -34,7 +54,6 @@ Engine::Engine()
     gameSpeed = 1.0;
     running = true;
     elapsedTime = 0.0;
-    
     soundManager = new SoundManager();
 }
 Engine::~Engine()
@@ -43,6 +62,14 @@ Engine::~Engine()
         windowManager->close();
     delete soundManager;
     soundManager = nullptr;
+
+#ifdef WIN32
+    if (exchndl)
+    {
+        FreeLibrary(exchndl);
+        exchndl = nullptr;
+    }
+#endif // WIN32
 }
 
 void Engine::registerObject(string name, P<PObject> obj)
@@ -67,10 +94,10 @@ void Engine::runMainLoop()
         {
             float delta = frameTimeClock.getElapsedTime().asSeconds();
             frameTimeClock.restart();
-            if (delta > 0.5)
-                delta = 0.5;
-            if (delta < 0.001)
-                delta = 0.001;
+            if (delta > 0.5f)
+                delta = 0.5f;
+            if (delta < 0.001f)
+                delta = 0.001f;
             delta *= gameSpeed;
 
             entityList.update();
@@ -81,7 +108,7 @@ void Engine::runMainLoop()
             ScriptObject::clearDestroyedObjects();
             soundManager->updateTick();
             
-            sf::sleep(sf::seconds(1.0/60.0 - delta));
+            sf::sleep(sf::seconds(1.f/60.f - delta));
             //if (elapsedTime > 2.0)
             //    break;
         }
@@ -113,16 +140,16 @@ void Engine::runMainLoop()
 #endif
 
             float delta = frameTimeClock.restart().asSeconds();
-            if (delta > 0.5)
-                delta = 0.5;
-            if (delta < 0.001)
-                delta = 0.001;
+            if (delta > 0.5f)
+                delta = 0.5f;
+            if (delta < 0.001f)
+                delta = 0.001f;
             delta *= gameSpeed;
 #ifdef DEBUG
             if (sf::Keyboard::isKeyPressed(sf::Keyboard::Tab))
-                delta /= 5.0;
+                delta /= 5.f;
             if (sf::Keyboard::isKeyPressed(sf::Keyboard::Tilde))
-                delta *= 5.0;
+                delta *= 5.f;
 #endif
             EngineTiming engine_timing;
             
@@ -163,10 +190,25 @@ void Engine::handleEvent(sf::Event& event)
     if ((event.type == sf::Event::KeyPressed) && (event.key.code == sf::Keyboard::L))
     {
         int n = 0;
-        printf("---------------------\n");
+        printf("------------------------\n");
+        std::unordered_map<string,int> totals;
         for(PObject* obj = DEBUG_PobjListStart; obj; obj = obj->DEBUG_PobjListNext)
+        {
             printf("%c%4d: %4d: %s\n", obj->isDestroyed() ? '>' : ' ', n++, obj->getRefCount(), typeid(*obj).name());
-        printf("---------------------\n");
+            if (!obj->isDestroyed())
+            {
+                totals[typeid(*obj).name()]=totals[typeid(*obj).name()]+1;
+            }
+        }
+        printf("--non-destroyed totals--\n");
+        int grand_total=0;
+        for (auto entry : totals)
+        {
+            printf("%4d %s\n", entry.second, entry.first.c_str());
+            grand_total+=entry.second;
+        }
+        printf("%4d %s\n",grand_total,"All PObjects");
+        printf("------------------------\n");
     }
 #endif
     InputHandler::handleEvent(event);
